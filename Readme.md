@@ -17,7 +17,7 @@ pip install -r requirements.txt
 python seed.py recipes.json
 
 # 4. Start the server
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --port 8000 --reload
 ```
 
 ---
@@ -65,6 +65,6 @@ Allow port 8000 through your firewall:
 
 **Port already in use**
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+uvicorn main:app --port 8001 --reload
 # then open http://127.0.0.1:8001
 ```
