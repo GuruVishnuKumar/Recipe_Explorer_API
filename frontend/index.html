@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recipe Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    /* ── Layout ── */
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Header ── */
+    #app-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 24px; background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      flex-shrink: 0; z-index: 40;
+    }
+
+    /* ── Content area ── */
+    #content { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Table panel ── */
+    #table-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    #table-scroll { flex: 1; overflow: auto; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+    thead { position: sticky; top: 0; z-index: 10; }
+
+    .th-row th {
+      background: #f1f5f9; padding: 11px 14px;
+      text-align: left; font-weight: 600; color: #475569;
+      border-bottom: 2px solid #e2e8f0; white-space: nowrap;
+    }
+    .filter-row td { background: #fff; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+
+    /* Filter inputs */
+    .filter-wrap { position: relative; display: flex; align-items: center; }
+    .filter-icon { position: absolute; left: 7px; color: #94a3b8; font-size: 11px; pointer-events: none; }
+    .filter-input {
+      width: 100%; box-sizing: border-box;
+      padding: 5px 24px 5px 22px;
+      border: 1px solid #e2e8f0; border-radius: 6px;
+      font-size: 12px; color: #334155; background: #f8fafc;
+      outline: none; transition: border .15s, box-shadow .15s;
+    }
+    .filter-input:focus { border-color: #6366f1; background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .filter-input::placeholder { color: #94a3b8; }
+    .filter-clear { position: absolute; right: 5px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 12px; padding: 1px 2px; line-height: 1; border-radius: 3px; display: none; }
+    .filter-clear:hover { color: #475569; background: #f1f5f9; }
+    .has-value .filter-clear { display: block; }
+    .has-value .filter-input { border-color: #a5b4fc; background: #fafafe; }
+
+    /* Body rows */
+    tbody tr { cursor: pointer; border-bottom: 1px solid #f1f5f9; transition: background .12s; }
+    tbody tr:hover { background: #f0f4ff; }
+    tbody tr.selected { background: #e0e7ff; }
+    tbody td { padding: 11px 14px; color: #334155; vertical-align: middle; overflow: hidden; }
+
+    /* Title truncation */
+    .title-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: #1e293b; display: block; }
+
+    /* Stars */
+    .star-row { display: flex; align-items: center; gap: 5px; }
+    .stars-display { display: flex; }
+    .star { font-size: 14px; line-height: 1; }
+    .star.filled, .star.half { color: #f59e0b; }
+    .star.empty { color: #d1d5db; }
+    .rating-num { font-size: 12px; color: #64748b; font-weight: 500; }
+
+    /* Skeleton */
+    .skeleton { background: linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; display: inline-block; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ── Pagination ── */
+    #pagination { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fff; border-top: 1px solid #e2e8f0; flex-shrink: 0; font-size: 13px; color: #475569; }
+    .page-btn { padding: 5px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; font-size: 13px; transition: background .15s; }
+    .page-btn:hover:not(:disabled) { background: #f1f5f9; }
+    .page-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .page-size-select { border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 13px; color: #334155; background: #fff; cursor: pointer; outline: none; }
+    .page-size-select:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+
+    /* ── Drawer (push layout — table shrinks, drawer opens beside it) ── */
+    #drawer { width: 0; flex-shrink: 0; overflow: hidden; transition: width 0.3s cubic-bezier(0.4,0,0.2,1); background: #fff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,.08); }
+    #drawer.open { width: 430px; }
+    #drawer-inner { width: 430px; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+    /* Drawer header */
+    #drawer-header { padding: 16px 44px 14px 20px; border-bottom: 1px solid #f1f5f9; flex-shrink: 0; background: #fff; position: relative; }
+    #d-title { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 6px; line-height: 1.35; }
+    #d-cuisine-badge { display: inline-block; background: #ede9fe; color: #6d28d9; font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 99px; }
+    #drawer-close { position: absolute; top: 14px; right: 14px; width: 28px; height: 28px; border-radius: 50%; background: #f1f5f9; border: none; cursor: pointer; color: #64748b; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background .15s; }
+    #drawer-close:hover { background: #e2e8f0; }
+
+    /* Drawer body */
+    #drawer-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* KV pair */
+    .kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px; align-items: baseline; }
+    .kv-key { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; padding-top: 2px; }
+    .kv-val { font-size: 13.5px; color: #334155; line-height: 1.55; }
+
+    /* Time block */
+    .time-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+    .time-trigger { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; user-select: none; transition: background .15s; }
+    .time-trigger:hover { background: #f1f5f9; }
+    .t-label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; }
+    .t-value { font-size: 16px; font-weight: 700; color: #1e293b; margin-top: 3px; }
+    .expand-icon { font-size: 22px; color: #94a3b8; font-weight: 300; line-height: 1; transition: transform .2s; }
+    .expand-icon.open { transform: rotate(45deg); }
+    .time-details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px; border-top: 1px solid #e2e8f0; }
+    .time-details.hidden { display: none; }
+    .time-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; }
+    .tc-label { font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    .tc-val { font-size: 17px; font-weight: 700; color: #1e293b; margin-top: 4px; }
+
+    /* Section title */
+    .sect-title { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+
+    /* Nutrition table */
+    .nutr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .nutr-tbl th { background: #f8fafc; padding: 8px 12px; text-align: left; font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid #e2e8f0; }
+    .nutr-tbl td { padding: 9px 12px; color: #334155; border-top: 1px solid #f1f5f9; }
+    .nutr-tbl .nv { text-align: right; font-weight: 600; color: #1e293b; }
+    .nutr-tbl tr:nth-child(even) td { background: #fafafa; }
+
+    /* ── State screens ── */
+    .state-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 60px 24px; text-align: center; }
+    .state-icon { font-size: 50px; line-height: 1; }
+    .state-title { font-size: 17px; font-weight: 600; color: #334155; }
+    .state-sub { font-size: 13px; color: #94a3b8; max-width: 300px; line-height: 1.5; }
+    .state-btn { margin-top: 4px; padding: 7px 20px; background: #6366f1; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s; }
+    .state-btn:hover { background: #4f46e5; }
+
+    /* Badges */
+    .count-badge { background: #ede9fe; color: #6d28d9; font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 99px; }
+    .clear-btn { padding: 5px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #64748b; font-size: 12px; cursor: pointer; display: none; }
+    .clear-btn:hover { background: #f1f5f9; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ════ HEADER ════ -->
+  <header id="app-header">
+    <span style="font-size:26px;">🍽️</span>
+    <div>
+      <h1 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">Recipe Explorer</h1>
+      <p style="margin:0;font-size:12px;color:#94a3b8;">Browse, filter and discover recipes</p>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+      <span id="count-badge" class="count-badge" style="display:none;"></span>
+      <button id="clear-filters-btn" class="clear-btn" onclick="clearAllFilters()">✕ Clear filters</button>
+    </div>
+  </header>
+
+  <!-- ════ CONTENT ════ -->
+  <div id="content">
+
+    <!-- ─── TABLE PANEL ─── -->
+    <div id="table-panel">
+      <div id="table-scroll">
+        <table>
+          <thead>
+            <!-- Column headers -->
+            <tr class="th-row">
+              <th style="width:22%;">Title</th>
+              <th style="width:20%;">Cuisine</th>
+              <th style="width:18%;">Rating</th>
+              <th style="width:14%;">Total Time</th>
+              <th style="width:14%;">Serves</th>
+            </tr>
+            <!-- Field-level filter row — one input per column -->
+            <tr class="filter-row">
+              <td>
+                <div class="filter-wrap" id="fw-title">
+                  <span class="filter-icon">🔍</span>
+                  <input class="filter-input" id="f-title" placeholder="Search title…" oninput="onInput(this,'fw-title')" />
+                  <button class="filter-clear" onclick="clearFilter('f-title','fw-title')">✕</button>
+                </div>
+              </td>
+              <td>
+                <div class="filter-wrap" id="fw-cuisine">
+                  <span class="filter-icon">🌍</span>
+                  <input class="filter-input" id="f-cuisine" placeholder="Filter cuisine…" oninput="onInput(this,'fw-cuisine')" />
+                  <button class="filter-clear" onclick="clearFilter('f-cuisine','fw-cuisine')">✕</button>
+                </div>
+              </td>
+              <td>
+                <div class="filter-wrap" id="fw-rating">
+                  <span class="filter-icon">★</span>
+                  <input class="filter-input" id="f-rating" placeholder="e.g. >=4.5" oninput="onInput(this,'fw-rating')" />
+                  <button class="filter-clear" onclick="clearFilter('f-rating','fw-rating')">✕</button>
+                </div>
+              </td>
+              <td>
+                <div class="filter-wrap" id="fw-time">
+                  <span class="filter-icon">⏱</span>
+                  <input class="filter-input" id="f-total-time" placeholder="e.g. <=60" oninput="onInput(this,'fw-time')" />
+                  <button class="filter-clear" onclick="clearFilter('f-total-time','fw-time')">✕</button>
+                </div>
+              </td>
+              <td>
+                <div class="filter-wrap" id="fw-serves">
+                  <span class="filter-icon">👥</span>
+                  <input class="filter-input" id="f-serves" placeholder="e.g. 4" oninput="onInput(this,'fw-serves')" />
+                  <button class="filter-clear" onclick="clearFilter('f-serves','fw-serves')">✕</button>
+                </div>
+              </td>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div id="pagination">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span>Rows per page:</span>
+          <select class="page-size-select" id="limit-select" onchange="onLimitChange()">
+            <option value="15" selected>15</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="page-info" style="color:#94a3b8;font-size:12px;"></span>
+          <button class="page-btn" id="btn-prev" onclick="changePage(-1)">← Prev</button>
+          <button class="page-btn" id="btn-next" onclick="changePage(1)">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── DRAWER ─── -->
+    <div id="drawer">
+      <div id="drawer-inner">
+
+        <!-- a. Title + Cuisine in header -->
+        <div id="drawer-header">
+          <h2 id="d-title">Select a recipe</h2>
+          <span id="d-cuisine-badge"></span>
+          <button id="drawer-close" onclick="closeDrawer()">✕</button>
+        </div>
+
+        <div id="drawer-body">
+
+          <!-- b. Description: Key/Value pair -->
+          <div class="kv">
+            <span class="kv-key">Description</span>
+            <span class="kv-val" id="d-desc">—</span>
+          </div>
+
+          <!-- c. Total Time: with expand icon → Cook Time + Prep Time -->
+          <div class="time-block">
+            <div class="time-trigger" onclick="toggleTime()">
+              <div>
+                <div class="t-label">Total Time</div>
+                <div class="t-value" id="d-total-time">—</div>
+              </div>
+              <span class="expand-icon" id="expand-icon">+</span>
+            </div>
+            <div class="time-details hidden" id="time-details">
+              <div class="time-card">
+                <div class="tc-label">Prep Time</div>
+                <div class="tc-val" id="d-prep">—</div>
+              </div>
+              <div class="time-card">
+                <div class="tc-label">Cook Time</div>
+                <div class="tc-val" id="d-cook">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rating -->
+          <div class="kv">
+            <span class="kv-key">Rating</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="stars-display" id="d-stars" style="font-size:20px;"></div>
+              <span style="font-size:13px;font-weight:600;color:#475569;" id="d-rating-text"></span>
+            </div>
+          </div>
+
+          <!-- Serves -->
+          <div class="kv">
+            <span class="kv-key">Serves</span>
+            <span class="kv-val" id="d-serves">—</span>
+          </div>
+
+          <!-- d. Nutrition section — exactly the 9 required fields -->
+          <div>
+            <div class="sect-title">Nutrition Facts</div>
+            <div id="d-nutrients"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CONFIG
+// Frontend and API are served from the same FastAPI server.
+// window.location.origin automatically resolves to the correct
+// host+port whether accessed via localhost or a network IP.
+// ════════════════════════════════════════════════════════════
+const API_BASE = window.location.origin;
+
+// Exactly the 9 nutrition fields from requirements (in order)
+const NUTR_FIELDS = [
+  ["calories",            "Calories"],
+  ["carbohydrateContent", "Carbohydrates"],
+  ["cholesterolContent",  "Cholesterol"],
+  ["fiberContent",        "Fiber"],
+  ["proteinContent",      "Protein"],
+  ["saturatedFatContent", "Saturated Fat"],
+  ["sodiumContent",       "Sodium"],
+  ["sugarContent",        "Sugar"],
+  ["fatContent",          "Total Fat"],
+];
+
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+let page         = 1;
+let limit        = 15;
+let totalCount   = 0;
+let debounce     = null;
+let drawerCache  = {};     // id → recipe object
+let timeOpen     = false;
+let currentRows  = [];     // current page rows for client-side serves filter
+
+// ════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const val = id => $(id).value.trim();
+
+function fmtTime(mins) {
+  if (mins == null) return "—";
+  const n = parseInt(mins);
+  if (isNaN(n)) return "—";
+  if (n < 60) return `${n} min`;
+  const h = Math.floor(n / 60), m = n % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function buildStars(rating, size) {
+  if (rating == null) return `<span style="color:#cbd5e1;font-size:12px;">No rating</span>`;
+  const sz    = size || "14px";
+  const full  = Math.floor(rating);
+  const half  = (rating - full) >= 0.5;
+  const empty = 5 - full - (half ? 1 : 0);
+  let s = "";
+  for (let i = 0; i < full;  i++) s += `<span class="star filled"  style="font-size:${sz}">★</span>`;
+  if (half)                        s += `<span class="star half"    style="font-size:${sz}">½</span>`;
+  for (let i = 0; i < empty; i++) s += `<span class="star empty"   style="font-size:${sz}">☆</span>`;
+  return s;
+}
+
+// ════════════════════════════════════════════════════════════
+// SKELETON LOADER
+// ════════════════════════════════════════════════════════════
+function showSkeleton(n = 12) {
+  const widths = [170, 130, 100, 55, 75];
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    html += "<tr>" + widths.map(w =>
+      `<td style="padding:13px 14px;">
+         <div class="skeleton" style="height:13px;width:${Math.round(w * (0.55 + Math.random() * 0.45))}px;"></div>
+       </td>`).join("") + "</tr>";
+  }
+  $("tbody").innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER TABLE
+// ════════════════════════════════════════════════════════════
+function renderTable(recipes) {
+  currentRows = recipes;
+  const tbody = $("tbody");
+
+  if (!recipes || recipes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5">
+      <div class="state-screen">
+        <div class="state-icon">🔍</div>
+        <div class="state-title">No recipes found</div>
+        <div class="state-sub">No recipes match your current filters. Try adjusting or clearing them.</div>
+        <button class="state-btn" onclick="clearAllFilters()">Clear All Filters</button>
+      </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = recipes.map(r => `
+    <tr class="recipe-row" data-id="${r.id}" onclick="openDrawer(${r.id}, this)">
+      <td style="width:22%;"><span class="title-cell" title="${esc(r.title || '')}">${esc(r.title || '—')}</span></td>
+      <td style="width:20%;color:#475569;">${esc(r.cuisine || '—')}</td>
+      <td style="width:18%;">
+        <div class="star-row">
+          <div class="stars-display">${buildStars(r.rating, "14px")}</div>
+          ${r.rating != null ? `<span class="rating-num">${r.rating.toFixed(1)}</span>` : ""}
+        </div>
+      </td>
+      <td style="width:14%;color:#475569;">${fmtTime(r.total_time)}</td>
+      <td style="width:14%;color:#475569;">${esc(r.serves || '—')}</td>
+    </tr>`).join("");
+
+  applyServesFilter();
+}
+
+// ════════════════════════════════════════════════════════════
+// CLIENT-SIDE SERVES FILTER
+// "Serves" column is filtered client-side (no API param for it)
+// ════════════════════════════════════════════════════════════
+function applyServesFilter() {
+  const term = val("f-serves");
+  if (!term) {
+    document.querySelectorAll(".recipe-row").forEach(r => r.style.display = "");
+    removeServesEmptyRow();
+    return;
+  }
+
+  let visible = 0;
+  document.querySelectorAll(".recipe-row").forEach(row => {
+    const rec   = currentRows.find(r => r.id === parseInt(row.dataset.id));
+    const match = rec && (rec.serves || "").toLowerCase().includes(term.toLowerCase());
+    row.style.display = match ? "" : "none";
+    if (match) visible++;
+  });
+
+  if (visible === 0) {
+    removeServesEmptyRow();
+    const tr = document.createElement("tr");
+    tr.id = "serves-empty-row";
+    tr.innerHTML = `<td colspan="5">
+      <div class="state-screen" style="padding:40px 20px;">
+        <div class="state-icon">👥</div>
+        <div class="state-title">No matching serving size</div>
+        <div class="state-sub">No recipes match "${esc(term)}" servings.</div>
+        <button class="state-btn" onclick="clearFilter('f-serves','fw-serves')">Clear serves filter</button>
+      </div></td>`;
+    $("tbody").appendChild(tr);
+  } else {
+    removeServesEmptyRow();
+  }
+}
+
+function removeServesEmptyRow() {
+  const el = $("serves-empty-row");
+  if (el) el.remove();
+}
+
+// ════════════════════════════════════════════════════════════
+// FETCH DATA FROM API
+// ════════════════════════════════════════════════════════════
+async function fetchRecipes() {
+  showSkeleton();
+
+  const title    = val("f-title");
+  const cuisine  = val("f-cuisine");
+  const rating   = val("f-rating");
+  const totTime  = val("f-total-time");
+  // f-serves is client-side only
+
+  const isSearch = !!(title || cuisine || rating || totTime);
+
+  try {
+    let data;
+
+    if (isSearch) {
+      const p = new URLSearchParams({ page, limit });
+      if (title)   p.set("title",      title);
+      if (cuisine) p.set("cuisine",    cuisine);
+      if (rating)  p.set("rating",     rating);
+      if (totTime) p.set("total_time", totTime);
+      const res = await fetch(`${API_BASE}/api/recipes/search?${p}`);
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.detail || `HTTP ${res.status}`);
+      }
+      data = await res.json();
+      totalCount = data.total;
+      renderTable(data.data);
+    } else {
+      const p = new URLSearchParams({ page, limit });
+      const res = await fetch(`${API_BASE}/api/recipes?${p}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      data = await res.json();
+      totalCount = data.total;
+      renderTable(data.data);
+    }
+
+    updatePaginationUI();
+    syncClearBtn();
+
+  } catch (err) {
+    showErrorScreen(err.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// PAGINATION
+// ════════════════════════════════════════════════════════════
+function updatePaginationUI() {
+  const pages = Math.ceil(totalCount / limit) || 1;
+  const start = (page - 1) * limit + 1;
+  const end   = Math.min(page * limit, totalCount);
+
+  $("count-badge").textContent     = `${totalCount.toLocaleString()} recipes`;
+  $("count-badge").style.display   = totalCount > 0 ? "" : "none";
+  $("page-info").textContent       = totalCount > 0 ? `${start.toLocaleString()}–${end.toLocaleString()} of ${totalCount.toLocaleString()}` : "";
+  $("btn-prev").disabled           = page <= 1;
+  $("btn-next").disabled           = page >= pages;
+}
+
+function changePage(d) {
+  const pages = Math.ceil(totalCount / limit) || 1;
+  page = Math.max(1, Math.min(page + d, pages));
+  fetchRecipes();
+}
+
+function onLimitChange() {
+  limit = parseInt($("limit-select").value);
+  page  = 1;
+  fetchRecipes();
+}
+
+// ════════════════════════════════════════════════════════════
+// FILTER EVENTS
+// ════════════════════════════════════════════════════════════
+function onInput(inputEl, wrapId) {
+  $(wrapId).classList.toggle("has-value", !!inputEl.value);
+
+  clearTimeout(debounce);
+  debounce = setTimeout(() => {
+    page = 1;
+    drawerCache = {};
+
+    // Serves-only change? Handle client-side, no re-fetch needed
+    if (inputEl.id === "f-serves" && currentRows.length > 0 &&
+        !val("f-title") && !val("f-cuisine") && !val("f-rating") && !val("f-total-time")) {
+      applyServesFilter();
+      syncClearBtn();
+      return;
+    }
+
+    fetchRecipes();
+  }, 380);
+}
+
+function clearFilter(inputId, wrapId) {
+  $(inputId).value = "";
+  $(wrapId).classList.remove("has-value");
+
+  page = 1;
+  drawerCache = {};
+
+  if (inputId === "f-serves" && currentRows.length > 0 &&
+      !val("f-title") && !val("f-cuisine") && !val("f-rating") && !val("f-total-time")) {
+    applyServesFilter();
+    syncClearBtn();
+    return;
+  }
+  fetchRecipes();
+}
+
+function clearAllFilters() {
+  [["f-title","fw-title"],["f-cuisine","fw-cuisine"],["f-rating","fw-rating"],
+   ["f-total-time","fw-time"],["f-serves","fw-serves"]].forEach(([i, w]) => {
+    $(i).value = "";
+    $(w).classList.remove("has-value");
+  });
+  page = 1;
+  fetchRecipes();
+}
+
+function syncClearBtn() {
+  const active = ["f-title","f-cuisine","f-rating","f-total-time","f-serves"].some(id => val(id));
+  $("clear-filters-btn").style.display = active ? "" : "none";
+}
+
+// ════════════════════════════════════════════════════════════
+// ERROR STATE
+// ════════════════════════════════════════════════════════════
+function showErrorScreen(msg) {
+  $("tbody").innerHTML = `<tr><td colspan="5">
+    <div class="state-screen">
+      <div class="state-icon">⚠️</div>
+      <div class="state-title">Could not load recipes</div>
+      <div class="state-sub">${esc(msg)}</div>
+      <div style="margin-top:6px;font-size:12px;color:#94a3b8;">
+        Make sure the server is running:<br>
+        <code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:11px;">uvicorn main:app --host 0.0.0.0 --port 8000 --reload</code>
+      </div>
+      <button class="state-btn" onclick="fetchRecipes()" style="margin-top:10px;">↺ Retry</button>
+    </div></td></tr>`;
+  $("count-badge").style.display = "none";
+  $("page-info").textContent = "";
+  $("btn-prev").disabled = true;
+  $("btn-next").disabled = true;
+}
+
+// ════════════════════════════════════════════════════════════
+// DRAWER
+// ════════════════════════════════════════════════════════════
+async function openDrawer(id, rowEl) {
+  document.querySelectorAll(".recipe-row").forEach(r => r.classList.remove("selected"));
+  if (rowEl) rowEl.classList.add("selected");
+
+  $("drawer").classList.add("open");
+
+  // Reset time expand
+  timeOpen = false;
+  $("time-details").classList.add("hidden");
+  $("expand-icon").textContent = "+";
+  $("expand-icon").classList.remove("open");
+
+  let recipe = drawerCache[id];
+  if (!recipe) {
+    drawerLoading();
+    try {
+      const res = await fetch(`${API_BASE}/api/recipes/${id}`);
+      if (!res.ok) throw new Error("Recipe not found");
+      recipe = await res.json();
+      drawerCache[id] = recipe;
+    } catch (e) {
+      $("d-title").textContent = "Error loading recipe";
+      $("d-desc").textContent  = e.message;
+      return;
+    }
+  }
+
+  fillDrawer(recipe);
+}
+
+function drawerLoading() {
+  $("d-title").textContent         = "Loading…";
+  $("d-cuisine-badge").textContent = "";
+  $("d-desc").textContent          = "";
+  $("d-total-time").textContent    = "";
+  $("d-prep").textContent          = "—";
+  $("d-cook").textContent          = "—";
+  $("d-stars").innerHTML           = "";
+  $("d-rating-text").textContent   = "";
+  $("d-serves").textContent        = "—";
+  $("d-nutrients").innerHTML       = "";
+}
+
+function fillDrawer(r) {
+  // a. Title + Cuisine
+  $("d-title").textContent         = r.title   || "Untitled";
+  $("d-cuisine-badge").textContent = r.cuisine || "";
+
+  // b. Description K/V
+  $("d-desc").textContent = r.description || "No description available.";
+
+  // c. Total Time (expandable)
+  $("d-total-time").textContent = fmtTime(r.total_time);
+  $("d-prep").textContent       = fmtTime(r.prep_time);
+  $("d-cook").textContent       = fmtTime(r.cook_time);
+
+  // Rating
+  $("d-stars").innerHTML         = buildStars(r.rating, "20px");
+  $("d-rating-text").textContent = r.rating != null ? `${r.rating.toFixed(1)} / 5.0` : "Not rated";
+
+  // Serves
+  $("d-serves").textContent = r.serves || "—";
+
+  // d. Nutrition table — exactly the 9 required fields
+  const nutrEl = $("d-nutrients");
+  if (r.nutrients && Object.keys(r.nutrients).length) {
+    const rows = NUTR_FIELDS
+      .map(([key, label]) => {
+        const v = r.nutrients[key];
+        if (!v) return "";
+        return `<tr><td>${esc(label)}</td><td class="nv">${esc(String(v))}</td></tr>`;
+      })
+      .filter(Boolean)
+      .join("");
+
+    nutrEl.innerHTML = rows
+      ? `<table class="nutr-tbl">
+           <thead><tr><th>Nutrient</th><th style="text-align:right;">Per Serving</th></tr></thead>
+           <tbody>${rows}</tbody>
+         </table>`
+      : `<p style="color:#94a3b8;font-size:13px;">No nutrition data.</p>`;
+  } else {
+    nutrEl.innerHTML = `<p style="color:#94a3b8;font-size:13px;">No nutrition data available.</p>`;
+  }
+}
+
+function closeDrawer() {
+  $("drawer").classList.remove("open");
+  document.querySelectorAll(".recipe-row").forEach(r => r.classList.remove("selected"));
+}
+
+function toggleTime() {
+  timeOpen = !timeOpen;
+  $("time-details").classList.toggle("hidden", !timeOpen);
+  $("expand-icon").textContent = timeOpen ? "−" : "+";
+  $("expand-icon").classList.toggle("open", timeOpen);
+}
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+fetchRecipes();
+</script>
+</body>
+</html>

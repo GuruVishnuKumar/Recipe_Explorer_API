@@ -1,0 +1,41 @@
+# 🔹 Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 🔹 Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# 🔹 Environment variables
+.env
+
+# 🔹 SQLite database files
+*.db
+*.sqlite3
+
+# 🔹 IDE files
+.vscode/
+.idea/
+
+# 🔹 OS files
+.DS_Store
+Thumbs.db
+
+# 🔹 Logs
+*.log
+
+# 🔹 Build / dist
+build/
+dist/
+*.egg-info/
+
+# 🔹 Coverage reports
+.coverage
+htmlcov/
+
+# 🔹 Temporary files
+*.tmp
+*.swp
