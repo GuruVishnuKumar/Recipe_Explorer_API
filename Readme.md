@@ -8,7 +8,7 @@
 
 ```bash
 # 1. Go into the project folder
-cd recipes-api
+cd Recipe_Explorer_API
 
 # 2. Install dependencies
 pip install -r requirements.txt
